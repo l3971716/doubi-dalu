@@ -858,9 +858,23 @@ body[data-focus="emotion"] [data-layer="emotion"]{box-shadow:0 0 0 1.5px rgba(16
       <div class="card-title">
         <span class="dot" style="background:var(--teal)"></span>
         大类资产占比
+        <button id="cat-refresh" onclick="flowRefresh(this)" title="立即重拉实时行情并重算占比" style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:rgba(212,175,55,.10);color:#f0d98c;cursor:pointer">刷新</button>
+        <button id="cat-sources" onclick="toggleSources(this)" data-panel="cat-sources-panel" style="font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid rgba(94,168,255,.45);background:rgba(94,168,255,.10);color:#9cc4ff;cursor:pointer">数据源</button>
       </div>
-      <div class="card-desc">按美元计价估算 · 随实时价格与汇率波动</div>
+      <div id="cat-sources-panel" style="display:none;margin:0 0 10px;padding:10px 12px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(0,0,0,.25);font-size:12px;line-height:1.9;color:#c6cede">
+        <div style="font-weight:700;color:#9cc4ff;margin-bottom:4px">各口径与来源 · 免key · 无需token</div>
+        <div><b>房地产 $393T</b>：Savills 2026 全球存量 · 年度基线（日内不变）</div>
+        <div><b>债券 $160.7T</b>：SIFMA 2026 Fact Book · 年度基线（日内不变）</div>
+        <div><b>货币M2</b>：汇率实时折算 · 腾讯 <a href="https://qt.gtimg.cn" target="_blank" rel="noopener" style="color:#9cc4ff">qt.gtimg.cn</a>（USDCNY/EURUSD/JPY 锚定日内变动）</div>
+        <div><b>股票市场</b>：标普/A股/DAX/日经四大指数实时锚定 · 腾讯 qt.gtimg.cn</div>
+        <div><b>黄金</b>：实时金价 × 全球存量 · 腾讯 hf_GC ｜ gold-api XAU</div>
+        <div><b>白银</b>：实时银价 × 存量 · 腾讯 hf_SI ｜ gold-api XAG</div>
+        <div><b>数字货币</b>：实时总市值 · Gate.io <a href="https://api.gateio.ws/api/v4/spot/tickers" target="_blank" rel="noopener" style="color:#9cc4ff">api.gateio.ws</a></div>
+        <div id="cat-sources-status" style="color:#8a93a8;margin-top:4px">状态：待刷新…</div>
+      </div>
+      <div class="card-desc">按美元计价估算 · 随实时价格与汇率波动 · 每60秒自动重算 · 红▲=较上次涨、绿▼=较上次跌</div>
       <div class="cat-list" id="cat-list"></div>
+      <div id="cat-updated" style="font-size:11px;color:var(--text-dim);margin-top:8px;text-align:right">更新于 --</div>
     </div>
   </div>
 
@@ -1761,6 +1775,10 @@ const CAT_LABELS = {
   silver: '白银',
 };
 
+// 大类实时性标记：true=随实时行情/汇率变动，false=年度基线
+const CAT_LIVE = { realEstate: false, bonds: false, stocks: true, m2: true, gold: true, silver: true, crypto: true };
+let prevCatVals = {};
+
 function renderCatList() {
   const t = computeTotals();
   const total = grandTotal();
@@ -1768,15 +1786,31 @@ function renderCatList() {
   const list = document.getElementById('cat-list');
   list.innerHTML = entries.map(([k, v]) => {
     const pct = (v/total*100).toFixed(1);
+    // 较上次刷新涨跌（红▲=涨、绿▼=跌，与能量球同一语义）
+    let delta = '';
+    const prev = prevCatVals[k];
+    if (isFinite(prev) && prev > 0) {
+      const d = (v - prev) / prev * 100;
+      if (Math.abs(d) >= 0.005) {
+        delta = '<span style="font-size:10px;margin-left:5px;color:' + (d >= 0 ? '#ff6b6b' : '#4ade80') + '">' +
+                (d >= 0 ? '▲+' : '▼') + Math.abs(d).toFixed(2) + '%</span>';
+      }
+    }
+    const badge = CAT_LIVE[k]
+      ? '<span style="font-size:9px;padding:1px 5px;border-radius:6px;border:1px solid rgba(52,211,153,.45);color:#34d399;margin-left:5px">实时</span>'
+      : '<span style="font-size:9px;padding:1px 5px;border-radius:6px;border:1px solid rgba(255,255,255,.20);color:#8a93a8;margin-left:5px">基线</span>';
     return `<div class="cat-row" onclick="focusCat('${k}')">
-      <div class="cat-name">${CAT_LABELS[k]}</div>
+      <div class="cat-name">${CAT_LABELS[k]}${badge}</div>
       <div class="cat-bar-wrap"><div class="cat-bar" style="width:${pct}%;background:${CAT_COLORS[k]}"></div></div>
       <div>
-        <div class="cat-val" style="color:${CAT_COLORS[k]}">$${fmtNum(v,1)}T</div>
+        <div class="cat-val" style="color:${CAT_COLORS[k]}">$${fmtNum(v,1)}T${delta}</div>
         <div class="cat-pct">${pct}%</div>
       </div>
     </div>`;
   }).join('');
+  prevCatVals = Object.assign({}, t);
+  const cu = document.getElementById('cat-updated');
+  if (cu) cu.textContent = '更新于 ' + new Date().toTimeString().slice(0,8) + ' · 每60秒自动重算';
 }
 
 // ============================================================
@@ -3343,16 +3377,26 @@ window.flowRefresh = function(btn) {
   }).catch(function(){ btn.textContent = '失败，重试'; setTimeout(function(){ btn.textContent = old; delete btn.dataset.busy; }, 1500); });
 };
 window.__updateSourceStatus = function() {
-  var el = document.getElementById('sources-status'); if (!el) return;
   var mk = window.marketData || {};
   var nQ = Object.keys(mk).length, liveN = 0;
   Object.keys(mk).forEach(function(k){ if (mk[k] && isFinite(mk[k].price)) liveN++; });
   var news = window.__NEWS_LIVE__ ? '实时' : '缓存兜底';
   var head = (window.__NEWS__ && window.__NEWS__[0] && window.__NEWS__[0].create_time) || '';
-  el.textContent = '状态：行情源 ' + liveN + '/' + nQ + ' 个实时 · 要闻 ' + news + (head ? ' · 头条时间 ' + head : '');
+  var el = document.getElementById('sources-status');
+  if (el) el.textContent = '状态：行情源 ' + liveN + '/' + nQ + ' 个实时 · 要闻 ' + news + (head ? ' · 头条时间 ' + head : '');
+  var el2 = document.getElementById('cat-sources-status');
+  if (el2) {
+    var LIVE_KEYS = ['^GSPC','000001.SS','^GDAXI','^N225','USDCNY=X','EURUSD=X','JPY=X','XAU','XAG','BTC-USD'];
+    var okN = 0;
+    LIVE_KEYS.forEach(function(k){ if (mk[k] && isFinite(mk[k].price)) okN++; });
+    el2.textContent = '状态：实时源 ' + okN + '/' + LIVE_KEYS.length + ' 个已连通 · 更新 '
+      + new Date().toTimeString().slice(0,8)
+      + (okN < LIVE_KEYS.length ? '（未连通项按基线/兜底估算）' : '');
+  }
 };
 window.toggleSources = function(btn) {
-  var pnl = document.getElementById('sources-panel');
+  var id = (btn && btn.dataset && btn.dataset.panel) || 'sources-panel';
+  var pnl = document.getElementById(id);
   if (!pnl) return;
   var show = pnl.style.display !== 'block';
   pnl.style.display = show ? 'block' : 'none';

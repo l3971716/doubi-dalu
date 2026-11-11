@@ -2032,10 +2032,48 @@ function resizeFlowCanvas() {
 }
 
 function ballRadius(val) {
-  return Math.max(14, Math.sqrt(val / 802) * Math.min(FW, FH) * 0.22);
+  const base = (HIERARCHY._root && HIERARCHY._root.val) || 802;
+  return Math.max(14, Math.sqrt(val / base) * Math.min(FW, FH) * 0.22);
+}
+
+// ============================================================
+// 实时同步：把下方分类实时值写回资产树 → 球内数字与下方完全同源，随行情增减
+// ============================================================
+function syncHierarchyLive() {
+  const t = computeTotals();
+  const root = HIERARCHY._root.children;
+  const map = {
+    realEstate: t.realEstate,        // 房地产（Savills 年度基线）
+    bonds: t.bonds,                  // 债券（SIFMA 年度基线）
+    stocks: t.stocks,                // 股票（指数实时锚定）
+    moneyMkt: t.m2,                  // 货币M2（汇率实时折算）
+    metals: t.gold + t.silver,       // 贵金属 = 黄金+白银 实时存量价值
+    crypto: t.crypto,                // 数字货币（实时总市值）
+  };
+  Object.keys(map).forEach(k => {
+    const node = root[k];
+    if (!node) return;
+    const live = map[k];
+    if (!isFinite(live) || live <= 0) return;
+    if (node._baseVal === undefined) node._baseVal = node.val;
+    const ratio = live / node._baseVal;
+    node.val = live;
+    if (node.children) {
+      Object.values(node.children).forEach(c => {
+        if (c._baseVal === undefined) c._baseVal = c.val;
+        c.val = c._baseVal * ratio;
+        if (c.children) Object.values(c.children).forEach(g => {
+          if (g._baseVal === undefined) g._baseVal = g.val;
+          g.val = g._baseVal * ratio;
+        });
+      });
+    }
+  });
+  HIERARCHY._root.val = Object.values(root).reduce((a, b) => a + (b.val || 0), 0);
 }
 
 function buildFlowBalls() {
+  syncHierarchyLive();
   const siblings = getSiblings(navPath);
   const entries = Object.entries(siblings);
   const n = entries.length;
@@ -2204,7 +2242,10 @@ function drawFlow(t) {
   fctx.fillText(navPath.length === 0 ? '全球' : getNode(navPath).name, cx, cy - 4);
   fctx.fillStyle = '#d4af37';
   fctx.font = 'bold 9px "JetBrains Mono", monospace';
-  fctx.fillText('$' + fmtNum(802, 0) + 'T', cx, cy + 10);
+  // 中心球数字：根层=实时总池（与 hero 同源），子层=该节点实时值
+  const centerNode = navPath.length === 0 ? null : getNode(navPath);
+  const centerVal = navPath.length === 0 ? grandTotal() : (centerNode && isFinite(centerNode.val) ? centerNode.val : 0);
+  fctx.fillText('$' + fmtNum(centerVal, 1) + 'T', cx, cy + 10);
 
   // flow lines (bezier curves between balls) with factor labels
   flowLines.forEach((line, idx) => {
@@ -2333,9 +2374,10 @@ function drawFlow(t) {
     fctx.textAlign = 'center';
     fctx.textBaseline = 'middle';
     fctx.fillText(b.name, b.x, b.y - 4);
-    fctx.fillStyle = 'rgba(255,255,255,0.8)';
+    // 球内数字 = 实时值（与下方分类同源、同一位小数），数值跳动时高亮
+    fctx.fillStyle = (b.valFlash || 0) > 0 ? '#ffe08a' : 'rgba(255,255,255,0.92)';
     fctx.font = 'bold 10px "JetBrains Mono", monospace';
-    fctx.fillText('$' + fmtNum(b.baseVal, b.baseVal >= 10 ? 0 : 1) + 'T', b.x, b.y + 10);
+    fctx.fillText('$' + fmtNum(b.baseVal, 1) + 'T', b.x, b.y + 10);
     // 实时涨跌 + 净流入流出（红=进 绿=出）
     const bf = ballFactors[b.key] || 1;
     const pct = (bf - 1) * 100;
@@ -2351,6 +2393,7 @@ function drawFlow(t) {
       fctx.font = 'bold 9px "JetBrains Mono", monospace';
       fctx.fillText('› ' + b.children + '个子市场', b.x, b.y + (Math.abs(netFlow) > 0.01 ? 46 : 34));
     }
+    if (b.valFlash) b.valFlash = Math.max(0, b.valFlash - 0.03);
   });
 
   // breadcrumb
@@ -2452,10 +2495,17 @@ function updateBallFactors() {
   const ANCHORED = ['forexReserves','collectibles','russell','krStocks','twStocks','auStocks','caStocks','ukStocks','irStocks','zaStocks','saStocks','ruStocks','brStocks','arStocks','seaStocks','inStocks','cnRealEstate','euRealEstate','jpRealEstate','tBill','euBonds','jpBonds','emBonds','munis','chinext','star50','dax','ftse','cac','swiss','nikkei','topix','sensex','nifty','naturalGas','copper','aluminum','ironOre','steel','nickel','lithium','cobalt','zinc','wheat','corn','cotton','coffee','sugar','rareEarth','cardano','chainlink','uni','okb','usdReserves','eurReserves','goldReserves','cnyReserves','art','wine'];
   ANCHORED.forEach(k => { if (!(k in f)) f[k] = 1; });
   ballFactors = f;
+  syncHierarchyLive();                       // 先把实时值写回资产树
+  const sib = getSiblings(navPath);
   flowBalls.forEach(b => {
+    const def = sib[b.key];
+    if (def && isFinite(def.val)) {
+      if (Math.abs(b.baseVal - def.val) > 1e-9) b.valFlash = 1;   // 数字变了 → 短暂高亮
+      b.baseVal = def.val;                                       // 球内数字 = 下方实时值（同源）
+    }
     const fv = ballFactors[b.key] || 1;
     b.isUp = fv >= 1.0;
-    b.targetR = ballRadius(b.baseVal * Math.max(0.5, Math.min(1.6, fv)));
+    b.targetR = ballRadius(b.baseVal);                           // 半径随实时规模，不再二次叠乘涨跌因子
   });
 }
 </script>

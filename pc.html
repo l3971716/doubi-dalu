@@ -1026,7 +1026,7 @@ body[data-focus="emotion"] [data-layer="emotion"]{box-shadow:0 0 0 1.5px rgba(16
         </div>
         <!-- DXY Dollar Index -->
         <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:12px">
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">美元指数DXY · 全球流动性开关</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">美元指数DXY · 全球流动性开关 <span style="font-size:9px;color:var(--text-faint)">无免费实时源 · 收盘基线</span></div>
           <div style="display:flex;align-items:baseline;gap:8px">
             <span style="font-size:24px;font-weight:700;color:#f87171" id="cmd-dxy">--</span>
             <span style="font-size:11px;color:#f87171" id="cmd-dxy-chg">--</span>
@@ -2848,8 +2848,9 @@ async function fetchGate(pair) {
     const data = await r.json();
     if (data && data[0] && data[0].last) {
       const price = parseFloat(data[0].last);
-      const chg = parseFloat(data[0].change_utc0) || 0;
-      return { price, prev: price - chg, chg: (chg / price * 100) };
+      let pct = parseFloat(data[0].change_percentage);
+      if (!isFinite(pct)) pct = 0;
+      return { price, prev: pct ? price / (1 + pct / 100) : price, chg: pct };
     }
     return null;
   } catch(e) { return null; }
@@ -2872,7 +2873,8 @@ const LIVE_MAP = {
   'USDCHF=X': { fn: () => fetchQQ('whUSDCHF'), label: '美元/瑞郎' },
   'USDCAD=X': { fn: () => fetchQQ('whUSDCAD'), label: '美元/加元' },
   '^N225': { fn: () => fetchEM('100.N225'), label: '日经' },
-  'DX-Y.NYB': { fn: () => fetchQQ('whDINI'), label: '美元指数' },
+  'DX-Y.NYB': { fn: () => fetchEM('100.UDI'), label: '美元指数' },
+  '^VIX': { fn: () => fetchQQ('usVIX'), label: 'VIX' },
   'XAU': { fn: () => fetchHf('hf_GC'), label: '纽约黄金' },
   'XAG': { fn: () => fetchHf('hf_SI'), label: '纽约白银' },
   'BTC-USD': { fn: () => fetchGate('BTC_USDT'), label: '比特币' },
@@ -2914,6 +2916,9 @@ async function fetchMarkets() {
     })
   );
   marketData = Object.fromEntries(entries);
+  // 无免费实时源的品种：用最近收盘基线兜底并打标（不再整体替换行情）
+  if (!marketData['DX-Y.NYB']) marketData['DX-Y.NYB'] = { price: 104.17, prev: 104.33, chg: -0.15, baseline: true };
+  if (!marketData['^VIX']) marketData['^VIX'] = { price: 21.67, prev: 21.67, chg: 0, baseline: true };
 }
 
 // ============================================================
@@ -3020,7 +3025,7 @@ function renderAll() {
 // ============================================================
 // 全局行情基线（实时行情未连通时兜底 · 发布环境自动被实时值覆盖）
 // ============================================================
-var FB_GLOBAL = { '^GSPC': {price:7805.45, chg:-0.02}, '^IXIC': {price:27204.38, chg:-0.15}, '000001.SS': {price:3800.86, chg:0.1}, '^N225': {price:65819, chg:0.9}, 'BTC-USD': {price:83450, chg:0.13}, 'XAU': {price:4162.43, chg:0.18}, 'XAG': {price:59.25, chg:0.46}, 'DX-Y.NYB': {price:103.6, chg:0.2}, '^VIX': {price:29, chg:6}, '^TNX': {price:5.21, chg:0.02} };
+var FB_GLOBAL = { '^GSPC': {price:7237.17, chg:4.73}, '^IXIC': {price:24089.56, chg:6.51}, '000001.SS': {price:3548.37, chg:0.27}, '^N225': {price:58644.63, chg:3.91}, 'BTC-USD': {price:59492.8, chg:-3.18}, 'XAU': {price:3651.66, chg:-0.82}, 'XAG': {price:42.23, chg:-3.38}, 'DX-Y.NYB': {price:104.17, chg:-0.15} };
 
 // ============================================================
 // 每日战报引擎（战史 / 战况 / 修为 / 指挥中心）· 实时快讯+行情驱动
@@ -3083,7 +3088,7 @@ function renderWarHistory(){
 function renderBattle(){
   var dte=document.getElementById('battle-date'), sum=document.getElementById('battle-summary');
   if(!sum) return;
-  if(!(window.marketData&&window.marketData['^VIX'])) window.marketData = FB_GLOBAL;
+  /* 已停用：伪造基线不再整体覆盖实时行情 */
   if(dte){ var d=new Date();
     dte.textContent='截至 '+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'（北京时间）';
   }
@@ -3140,7 +3145,7 @@ function renderBattle(){
 function renderRealm(){
   var el=document.getElementById('realm-current');
   if(!el) return;
-  if(!(window.marketData&&window.marketData['^VIX'])) window.marketData = FB_GLOBAL;
+  /* 已停用：伪造基线不再整体覆盖实时行情 */
   var md=window.marketData||{};
   var vix=md['^VIX'];
   var vp=(vix&&vix.price!=null)?vix.price:28;
@@ -3149,7 +3154,7 @@ function renderRealm(){
   else { el.innerHTML='<span style="color:#4ade80">斗宗 · 破境</span>。VIX '+vp+'，情绪回暖，跨资产再定价（空间之力）开启。'; }
 }
 function renderCmd(){
-  if(!(window.marketData&&window.marketData['^VIX'])) window.marketData = FB_GLOBAL;
+  /* 已停用：伪造基线不再整体覆盖实时行情 */
   var md=window.marketData||{};
   var dxy=md['DX-Y.NYB'];
   if(dxy&&dxy.price!=null){
@@ -4571,6 +4576,202 @@ window.__refreshAll = async function (btn) {
     if (btn) setTimeout(function () { delete btn.dataset.busy; }, 1400);
   }
 };
+</script>
+
+<!-- CARD-REFRESH -->
+<script>
+(function () {
+  var CARDS = [
+    { k: 'cmd',   t: '专业交易员指挥中心' },
+    { k: 'ai',    t: 'AI 智能投研' },
+    { k: 'corr',  t: '跨资产相关性热力图' },
+    { k: 'perf',  t: '跨资产收益率矩阵' },
+    { k: 'vix',   t: 'VIX 期限结构' },
+    { k: 'geo',   t: '地缘政治风险指数' },
+    { k: 'liq',   t: '全球流动性综合指数' },
+    { k: 'rates', t: '全球央行利率雷达' },
+    { k: 'scen',  t: '情景预测表' },
+    { k: 'macro', t: '宏观经济仪表盘' }
+  ];
+  var TIP = {
+    geo: '页面模型值（VIX/油价/快讯加权），非官方指数',
+    liq: '页面模型值（美元/股指/加密派生），非官方指数',
+    rates: '政策利率为决议日数据，无实时行情源',
+    scen: '规则推演表，随政策利率/波动率变化',
+    macro: 'CPI/失业率/GDP 为官方月度·季度数据'
+  };
+
+  function findCard(text) {
+    var all = document.querySelectorAll('div');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.childElementCount > 3) continue;
+      var tx = (el.textContent || '').trim();
+      if (tx.indexOf(text) < 0 || tx.length > 52) continue;
+      var fw = parseInt(getComputedStyle(el).fontWeight) || 400;
+      if (fw < 600) continue;
+      var p = el.parentElement;
+      for (var d = 0; d < 5 && p; d++) {
+        var st = getComputedStyle(p);
+        if (parseInt(st.borderRadius) >= 8 && parseFloat(st.paddingTop) >= 10) return { card: p, title: el };
+        p = p.parentElement;
+      }
+      if (el.parentElement) return { card: el.parentElement, title: el };
+    }
+    return null;
+  }
+
+  function mount(k) {
+    var c = findCard(CARDS.filter(function (x) { return x.k === k; })[0].t);
+    if (!c) return null;
+    c.card.style.position = 'relative';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '刷新';
+    b.style.cssText = 'position:absolute;right:10px;top:9px;z-index:6;font-size:10px;line-height:1;color:#e9d38b;' +
+      'background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.38);border-radius:9px;padding:5px 9px;' +
+      'cursor:pointer;font-family:inherit';
+    var s = document.createElement('div');
+    s.style.cssText = 'position:absolute;right:12px;top:32px;font-size:9px;color:#7c8497;pointer-events:none;text-align:right;max-width:60%';
+    c.card.appendChild(b);
+    c.card.appendChild(s);
+    b.onclick = function () { run(k, b, s); };
+    return { b: b, s: s };
+  }
+
+  var lastLive = 0;
+  async function maybeLive(force) {
+    if (!force && Date.now() - lastLive < 40000) return;
+    if (window.refreshLive) { try { await window.refreshLive(); lastLive = Date.now(); } catch (e) {} }
+  }
+
+  function deriveVix() {
+    var md = window.marketData || {}, d = md['^VIX'];
+    if (!d || !isFinite(d.price)) return false;
+    var v = d.price, pts = [v, v * 0.94, v * 0.88, v * 0.80];
+    var c = findCard('VIX 期限结构'); if (!c) return false;
+    var svg = c.card.querySelector('svg');
+    var max = Math.max.apply(null, pts) * 1.18, H = 80;
+    var xy = pts.map(function (p, i) { return [20 + i * 50, H - 10 - (p / max) * (H - 28)]; });
+    if (svg) {
+      var poly = svg.querySelector('polyline');
+      if (poly) poly.setAttribute('points', xy.map(function (o) { return o[0].toFixed(0) + ',' + o[1].toFixed(0); }).join(' '));
+      var cs = svg.querySelectorAll('circle');
+      for (var i = 0; i < cs.length; i++) { if (xy[i]) { cs[i].setAttribute('cx', xy[i][0].toFixed(0)); cs[i].setAttribute('cy', xy[i][1].toFixed(0)); } }
+    }
+    var labels = ['现货', '1月', '3月', '6月'], n = 0;
+    var spans = c.card.querySelectorAll('span');
+    for (var j = 0; j < spans.length; j++) {
+      var t = (spans[j].textContent || '').trim();
+      if (/^(现货|1月|3月|6月)\s/.test(t) && n < 4) { spans[j].textContent = labels[n] + ' ' + pts[n].toFixed(0); n++; }
+    }
+    var divs = c.card.querySelectorAll('div');
+    for (var q = 0; q < divs.length; q++) {
+      var dt = (divs[q].textContent || '').trim();
+      if (/^(Contango|Backwardation)/.test(dt)) {
+        divs[q].textContent = (pts[0] > pts[3] ? 'Contango · 近期波动高于远期' : 'Backwardation · 远期更贵') + ' · VIX ' + v.toFixed(2);
+        break;
+      }
+    }
+    return true;
+  }
+
+  function deriveGeo() {
+    var md = window.marketData || {};
+    var vix = md['^VIX'] && md['^VIX'].price, oil = md['OIL'] && md['OIL'].price;
+    if (!vix && !oil) return false;
+    var risk = 26;
+    if (vix) risk += Math.min(28, Math.max(0, (vix - 12) * 1.3));
+    if (oil && oil > 80) risk += 6;
+    var news = window.__NEWS__ || [], war = 0;
+    for (var i = 0; i < Math.min(news.length, 40); i++) {
+      if (/战争|冲突|制裁|袭击|空袭|导弹|封锁|军事|紧张/.test(news[i].rich_text || '')) war++;
+    }
+    risk += Math.min(26, war * 2.2);
+    risk = Math.max(0, Math.min(100, Math.round(risk)));
+    var c = findCard('地缘政治风险指数'); if (!c) return false;
+    var divs = c.card.querySelectorAll('div'), hit = false;
+    for (var q = 0; q < divs.length; q++) {
+      var t = (divs[q].textContent || '').trim();
+      if (/^\d{1,3}$/.test(t) && +t >= 0 && +t <= 100 && divs[q].childElementCount === 0) { divs[q].textContent = risk; hit = true; break; }
+    }
+    for (var p = 0; p < divs.length; p++) {
+      var s2 = (divs[p].textContent || '').trim();
+      if (/^(高度紧张|紧张|缓和|平静)$/.test(s2)) {
+        divs[p].textContent = risk >= 75 ? '高度紧张' : risk >= 55 ? '偏紧张' : risk >= 40 ? '中性' : '平静';
+        break;
+      }
+    }
+    return hit;
+  }
+
+  function deriveLiq() {
+    var md = window.marketData || {};
+    var spx = md['^GSPC'] && md['^GSPC'].price, dxy = md['DX-Y.NYB'] && md['DX-Y.NYB'].price,
+        btc = md['BTC-USD'] && md['BTC-USD'].price, vix = md['^VIX'] && md['^VIX'].price;
+    if (!spx || !dxy) return false;
+    var score = 50;
+    score += (dxy < 100 ? 12 : dxy < 105 ? 2 : -12);
+    if (vix) score += (vix < 18 ? 10 : vix < 25 ? 0 : -14);
+    if (btc) score += (btc > 70000 ? 8 : btc < 55000 ? -8 : 0);
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    var c = findCard('全球流动性综合指数'); if (!c) return false;
+    var divs = c.card.querySelectorAll('div'), hit = false;
+    for (var i = 0; i < divs.length; i++) {
+      var t = (divs[i].textContent || '').trim();
+      if (/^\d{1,3}$/.test(t) && +t <= 100 && divs[i].childElementCount === 0) { divs[i].textContent = score; hit = true; break; }
+    }
+    for (var j = 0; j < divs.length; j++) {
+      if (/^(紧缩|中性|宽松)$/.test((divs[j].textContent || '').trim())) {
+        divs[j].textContent = score >= 60 ? '宽松' : score >= 42 ? '中性' : '紧缩';
+        break;
+      }
+    }
+    return hit;
+  }
+
+  async function run(k, b, s) {
+    if (b.dataset.busy) return;
+    b.dataset.busy = '1'; b.textContent = '刷新中…'; s.textContent = '';
+    try {
+      if (k === 'cmd' || k === 'ai') {
+        await maybeLive(true);
+        if (k === 'ai') { if (window.renderAI) window.renderAI(); }
+        else { if (window.renderAll) window.renderAll(); if (window.renderAI) window.renderAI(); }
+        if (window.__updateSourceStatus) window.__updateSourceStatus();
+        s.textContent = '实时行情 · ' + new Date().toTimeString().slice(0, 8);
+      } else if (k === 'corr' || k === 'perf') {
+        if (window.__histRefresh) await window.__histRefresh(true);
+        s.textContent = '日线重算 · ' + new Date().toTimeString().slice(0, 8);
+      } else if (k === 'vix') {
+        await maybeLive(true);
+        if (!deriveVix()) s.textContent = 'VIX 源暂不可达';
+        else s.textContent = '按现价外推 · ' + new Date().toTimeString().slice(0, 8);
+      } else if (k === 'geo') {
+        await maybeLive(false);
+        if (!deriveGeo()) s.textContent = '行情不足，未重算';
+        else s.textContent = TIP.geo + ' · ' + new Date().toTimeString().slice(0, 8);
+      } else if (k === 'liq') {
+        await maybeLive(false);
+        if (!deriveLiq()) s.textContent = '行情不足，未重算';
+        else s.textContent = TIP.liq + ' · ' + new Date().toTimeString().slice(0, 8);
+      } else {
+        s.textContent = (TIP[k] || '官方数据，无实时源') + ' · 无新增数据';
+      }
+    } catch (e) {
+      s.textContent = '刷新失败：' + (e && e.message ? e.message : '网络');
+    }
+    b.textContent = '刷新'; delete b.dataset.busy;
+  }
+
+  function boot() {
+    CARDS.forEach(function (c) { try { mount(c.k); } catch (e) {} });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  window.__cardRefreshAll = function () {
+    CARDS.forEach(function (c) { var m = findCard(c.t); });
+  };
+})();
 </script>
 </body>
 

@@ -3638,12 +3638,22 @@ setInterval(refreshLive, 60000);
 .yl-p{font-size:12px;line-height:1.72;color:#dfe3ee;margin:2px 0}
 .yl-li{display:flex;gap:6px;font-size:12px;line-height:1.72;color:#dfe3ee;margin:2px 0}
 .yl-li b{color:#d4af37;font-weight:400}
-.yl-news{background:rgba(255,255,255,.035);border-left:2px solid rgba(212,175,55,.55);border-radius:7px;padding:7px 9px;margin:0 0 7px}
-.yl-news-h{display:flex;gap:6px;align-items:center;font-size:10px;color:#8b93a7;margin-bottom:3px}
+.yl-news{background:rgba(255,255,255,.038);border-left:2px solid rgba(212,175,55,.6);border-radius:8px;padding:9px 11px;margin:0 0 10px}
+.yl-news-h{display:flex;gap:8px;justify-content:space-between;align-items:center;font-size:10px;color:#8b93a7;margin-bottom:5px;padding-bottom:5px;border-bottom:1px dashed rgba(255,255,255,.08)}
 .yl-news-t{color:#d4af37;font-weight:700}
-.yl-news-b{font-size:12px;line-height:1.62;color:#dfe3ee}
+.yl-news-b{font-size:12px;line-height:1.72;color:#dfe3ee}
 .yl-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding-top:7px;border-top:1px solid rgba(255,255,255,.06);font-size:10px;color:#6b7280}
 .yl-doubao{font-size:10px;color:#d4af37;text-decoration:none;border:1px solid rgba(212,175,55,.4);border-radius:10px;padding:2px 8px;white-space:nowrap;background:none;cursor:pointer;font-family:inherit}
+.yl-gear{font-size:10px;color:#8b93a7;cursor:pointer;padding:0 8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;line-height:18px}
+.yl-gear:hover{color:#d4af37;border-color:rgba(212,175,55,.45)}
+.yl-cfg{display:none;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.22);font-size:11px;color:#c9d1e2}
+.yl-cfg.open{display:block}
+.yl-cfg-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.yl-cfg-row>span{width:64px;flex-shrink:0;color:#8b93a7}
+.yl-cfg-row input{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e8eaf1;padding:5px 8px;font-size:11px;outline:none;min-width:0}
+.yl-cfg-row input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:#d4af37}
+.yl-cfg-btn{background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);color:#e9d38b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:6px}
+.yl-cfg-tip{font-size:10px;color:#6b7280;line-height:1.6;margin-top:4px}
 .yl-u{align-self:flex-end;background:rgba(232,67,147,.16);border:1px solid rgba(232,67,147,.3);color:#f5d0e0}
 .yl-a{align-self:flex-start;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#d7dbe6}
 .yl-a b{color:#d4af37}
@@ -3663,7 +3673,16 @@ setInterval(refreshLive, 60000);
   <div class="yl-head">
     <b>药老 · 斗气大陆通晓</b>
     <span class="yl-sub">实时数据 · 智能问答</span>
+    <span class="yl-gear" id="yl-gear">AI 设置</span>
     <span class="yl-close" id="yl-close">✕</span>
+  </div>
+  <div class="yl-cfg" id="yl-cfg">
+    <div class="yl-cfg-row"><span>AI 回答</span><input type="checkbox" id="yl-ai-on" checked><span style="width:auto;color:#6b7280">关闭则只用页面内置研判</span></div>
+    <div class="yl-cfg-row"><span>接口地址</span><input id="yl-base" placeholder="https://text.pollinations.ai/openai"></div>
+    <div class="yl-cfg-row"><span>模型名</span><input id="yl-model" placeholder="openai"></div>
+    <div class="yl-cfg-row"><span>Key（可选）</span><input id="yl-key" placeholder="留空即走免 key 通道"></div>
+    <div class="yl-cfg-row"><button class="yl-cfg-btn" id="yl-cfg-save">保存</button><button class="yl-cfg-btn" id="yl-cfg-reset">恢复默认</button><span id="yl-cfg-tip" style="width:auto;color:#6b7280">未测</span></div>
+    <div class="yl-cfg-tip">默认免 key（Pollinations，OpenAI 兼容）。若你有带 token 的兼容地址，填接口与 Key 即可切换。</div>
   </div>
   <div class="yl-msgs" id="yl-msgs"></div>
   <div class="yl-chips" id="yl-chips"></div>
@@ -3677,7 +3696,7 @@ setInterval(refreshLive, 60000);
   var btn=document.getElementById('yaolao-btn'), panel=document.getElementById('yaolao-panel'),
       msgs=document.getElementById('yl-msgs'), inp=document.getElementById('yl-input'),
       send=document.getElementById('yl-send'), chips=document.getElementById('yl-chips'),
-      close=document.getElementById('yl-close');
+      close=document.getElementById('yl-close'), gear=document.getElementById('yl-gear'), cfgBox=document.getElementById('yl-cfg');
   var CHIPS=['今日要闻','美联储/央行利率','比特币多少了','油价怎么了','黄金多少钱','八族与异火','恐慌贪婪','美债收益率'];
   var RATES=[['美联储 Fed','3.75–4.00%','9/16加息25bp·12:0全票·点阵图指向10月再祭'],['欧央行 ECB','2.50%','9/10加息25bp·年内第二次'],['日央行 BoJ','1.25%','9/18加息·9/24生效·31年新高'],['中国 PBOC','3.03%','LPR低位·万亿买断式逆回购宽松'],['英央行 BoE','3.75%','9/17维持·6:3偏鹰'],['澳洲联储 RBA','鹰派','9/29加息概率95%·或为年内第四次']];
   var LORE='远古八族：魂族=美国·血祭紧缩 ｜ 炎族=中国·布雨宽松 ｜ 古族=欧盟·跟随紧缩 ｜ 石族=俄罗斯·能源对峙 ｜ 灵族=中东·热战 ｜ 雷族=英国·偏鹰 ｜ 药族=医药·专利稳态 ｜ 萧族=创新/炎盟·证道；丹塔=炼药师公会（加密）。\n异火榜：帝炎=全球流动性 ｜ 虚无吞炎=美元美债 ｜ 净莲妖火=原油 ｜ 金帝焚天炎=黄金/欧元 ｜ 三千焱炎火=BTC ｜ 骨灵冷火=黄金 ｜ 玄黄炎=现金。\n品阶：炼药师1-9品=机构层级 ｜ 功法黄玄地天=工具风险 ｜ 魔兽1-9阶=资产风险（九阶=黄金/BTC）。';
@@ -3782,7 +3801,7 @@ setInterval(refreshLive, 60000);
     var d=document.createElement('div'); d.className='yl-msg '+(who==='u'?'yl-u':'yl-a');
     if(who==='u'){ d.textContent=msg; }
     else { d.style.maxWidth='100%'; d.style.whiteSpace='normal'; d.appendChild(renderRich(msg)); }
-    msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+    msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; return d;
   }
   function mv(key,dec,label){
     if(key==='XAU'||key==='XAG'){ var p=(key==='XAU')?window.goldPrice:window.silverPrice; if(!p) return null; return (label||key)+' $'+Number(p).toLocaleString('en-US',{maximumFractionDigits:(key==='XAU'?0:2)}); }
@@ -3859,12 +3878,67 @@ setInterval(refreshLive, 60000);
     ctx.last=s;
     return parts.join('\n\n')+'\n\n（数据源：'+liveFlag()+'）';
   }
+  var aiHist=[];
+  function llmCfg(){
+    var d={base:'https://text.pollinations.ai/openai', model:'openai', key:'', on:true};
+    try{ var s=localStorage.getItem('doubi.llm'); if(s){ var o=JSON.parse(s); for(var k in o){ if(o[k]!==undefined) d[k]=o[k]; } } }catch(e){}
+    return d;
+  }
+  function saveCfg(o){ try{ localStorage.setItem('doubi.llm', JSON.stringify(o)); }catch(e){} }
+  function ctxBrief(){
+    var out=[];
+    try{
+      var md=window.marketData||{}, picks=[['^GSPC','标普500'],['^IXIC','纳指'],['^VIX','VIX'],['^TNX','美债10Y'],['DX-Y.NYB','美元指数'],['BTC-USD','BTC'],['OIL','WTI原油'],['XAU','黄金'],['XAG','白银'],['000001.SS','上证'],['^N225','日经225']], q=[];
+      picks.forEach(function(p){ var d=md[p[0]]; if(d&&isFinite(d.price)) q.push(p[1]+' '+(+d.price).toFixed(2)+(d.chg==null?'':'('+(d.chg>=0?'+':'')+d.chg.toFixed(2)+'%)')); });
+      if(q.length) out.push('实时行情：'+q.join('；'));
+      if(window.goldPrice) out.push('贵金属：黄金 $'+Math.round(window.goldPrice)+'/oz，白银 $'+(+window.silverPrice).toFixed(2)+'/oz');
+      var news=(window.__NEWS__||[]).slice(0,10).map(function(it){ return '['+relTime(it.create_time)+'] '+(it.rich_text||'').slice(0,90); });
+      if(news.length) out.push('最新快讯（按新鲜度）：\n'+news.join('\n'));
+      try{ out.push('央行政策利率：'+RATES.map(function(x){ return x[0]+' '+x[1]; }).join('；')); }catch(e){}
+      var f=computeFear(); out.push('情绪指数：'+f.label+' '+f.score+'/100');
+    }catch(e){}
+    return out.join('\n');
+  }
+  function cleanMd(t){
+    return String(t||'').replace(/\*\*/g,'').replace(/^#{1,6}\s*/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  async function askLLM(q){
+    var cfg=llmCfg();
+    if(!cfg.base) throw new Error('no base');
+    var sys='你是《斗破苍穹》里的药老（药尘），炼药宗师，语气沉稳带一点古意，可自称"老朽"，但回答必须专业、简洁、给结论，不要空话。用简体中文，控制在200字内。涉及行情、新闻、利率时只能用下面给出的实时数据，不许编造数字；数据里没有的就直说没有。\n\n【页面实时数据】\n'+ctxBrief();
+    var msgs=[{role:'system',content:sys}];
+    aiHist.slice(-8).forEach(function(m){ msgs.push(m); });
+    msgs.push({role:'user',content:q});
+    var headers={'Content-Type':'application/json'};
+    if(cfg.key) headers['Authorization']='Bearer '+cfg.key;
+    var ctrl=new AbortController(); var timer=setTimeout(function(){ ctrl.abort(); },25000);
+    var r=await fetch(cfg.base,{method:'POST',headers:headers,body:JSON.stringify({model:cfg.model||'openai',messages:msgs,max_tokens:800,temperature:0.7}),signal:ctrl.signal});
+    clearTimeout(timer);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var j=await r.json();
+    var t=j&&j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;
+    if(!t) throw new Error('empty');
+    t=cleanMd(t);
+    aiHist.push({role:'user',content:q}); aiHist.push({role:'assistant',content:t});
+    if(aiHist.length>16) aiHist=aiHist.slice(-16);
+    return t;
+  }
   function ask(q){
     q=(q||'').trim(); if(!q) return;
     window.__ylLastQ=q;
     add(q,'u');
-    var r; try{ r=answer(q); }catch(e){ r='老朽一时失神，请再问一次。'; }
-    add(r,'a');
+    var cfg=llmCfg();
+    if(!cfg.on){ var r0; try{ r0=answer(q); }catch(e){ r0='老朽一时失神，请再问一次。'; } add(r0,'a'); return; }
+    var ph=add('药老推演中…','a');
+    askLLM(q).then(function(t){
+      ph.innerHTML=''; ph.appendChild(renderRich(t));
+      msgs.scrollTop=msgs.scrollHeight;
+    }).catch(function(e){
+      var r; try{ r=answer(q); }catch(x){ r='老朽一时失神，请再问一次。'; }
+      ph.innerHTML='';
+      ph.appendChild(renderRich(r+'\n\n（大模型通道未连通，已切回页面内置研判：'+(e&&e.message?e.message:'网络')+'）'));
+      msgs.scrollTop=msgs.scrollHeight;
+    });
   }
   CHIPS.forEach(function(c){
     var b=document.createElement('button'); b.className='yl-chip'; b.textContent=c;
@@ -3874,6 +3948,31 @@ setInterval(refreshLive, 60000);
   inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ ask(inp.value); inp.value=''; } });
   btn.onclick=function(){ panel.classList.toggle('open'); if(panel.classList.contains('open')&&!msgs.children.length){ add('老朽药尘，藏身此页，通晓大陆万事。\n直接问即可：今日要闻、央行利率、比特币、黄金、油价……或者随便说个词，老朽帮你在快讯里找。','a'); } };
   close.onclick=function(){ panel.classList.remove('open'); };
+  function cfgFill(){
+    var c=llmCfg();
+    var on=document.getElementById('yl-ai-on'), base=document.getElementById('yl-base'),
+        model=document.getElementById('yl-model'), key=document.getElementById('yl-key');
+    if(on) on.checked=c.on!==false;
+    if(base) base.value=c.base||'';
+    if(model) model.value=c.model||'openai';
+    if(key) key.value=c.key||'';
+  }
+  cfgFill();
+  if(gear) gear.onclick=function(){ cfgBox.classList.toggle('open'); cfgFill(); };
+  var cfgSave=document.getElementById('yl-cfg-save'), cfgReset=document.getElementById('yl-cfg-reset'), cfgTip=document.getElementById('yl-cfg-tip');
+  if(cfgSave) cfgSave.onclick=function(){
+    var on=document.getElementById('yl-ai-on'), base=document.getElementById('yl-base'),
+        model=document.getElementById('yl-model'), key=document.getElementById('yl-key');
+    var c={on:on?on.checked:true, base:(base?base.value.trim():'')||'https://text.pollinations.ai/openai',
+           model:(model?model.value.trim():'')||'openai', key:key?key.value.trim():''};
+    saveCfg(c); aiHist=[];
+    if(cfgTip){ cfgTip.textContent='已保存'; setTimeout(function(){ cfgTip.textContent='未测'; },1500); }
+  };
+  if(cfgReset) cfgReset.onclick=function(){
+    try{ localStorage.removeItem('doubi.llm'); }catch(e){}
+    aiHist=[]; cfgFill();
+    if(cfgTip){ cfgTip.textContent='已恢复默认'; setTimeout(function(){ cfgTip.textContent='未测'; },1500); }
+  };
   // 供外部（苍穹控制台 / 态势舱 / 语音）调用
   window.__ask = ask; window.__nl = nl; window.__jn = jn; window.__relTime = relTime;
 })();
@@ -4113,7 +4212,8 @@ setInterval(refreshLive, 60000);
 
 
 <!-- ===== 悬浮刷新按钮（App 内置浏览器无下拉刷新，点此即更新） ===== -->
-<button id="page-reload" title="刷新为最新内容" style="position:fixed;right:16px;bottom:16px;z-index:99995;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#ffd76a,#a8842c);border:none;box-shadow:0 6px 22px rgba(212,175,55,.45);cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="location.reload()">
+<div id="refresh-toast" style="position:fixed;right:72px;bottom:22px;z-index:99996;max-width:60vw;font-size:11px;color:#e9d38b;background:rgba(13,17,32,.92);border:1px solid rgba(212,175,55,.35);border-radius:10px;padding:6px 10px;opacity:0;transition:opacity .3s;pointer-events:none">就绪</div>
+<button id="page-reload" title="刷新为最新内容" style="position:fixed;right:16px;bottom:16px;z-index:99995;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#ffd76a,#a8842c);border:none;box-shadow:0 6px 22px rgba(212,175,55,.45);cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="window.__refreshAll?window.__refreshAll(this):location.reload()">
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0d1120" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
 </button>
 
@@ -4439,6 +4539,38 @@ setInterval(refreshLive, 60000);
   window.__histData = function () { return current; };
 })();
 
+</script>
+
+<!-- REFRESH-ALL -->
+<script>
+window.__refreshAll = async function (btn) {
+  if (btn && btn.dataset.busy) return;
+  if (btn) btn.dataset.busy = '1';
+  var svg = btn ? btn.querySelector('svg') : null;
+  if (svg) { svg.style.transition = 'transform .9s linear'; svg.style.transform = 'rotate(360deg)'; }
+  var toast = document.getElementById('refresh-toast');
+  function say(t) { if (toast) { toast.textContent = t; toast.style.opacity = '1'; } }
+  var okAll = true;
+  try {
+    say('① 刷新行情…');
+    if (window.refreshLive) { try { await window.refreshLive(); } catch (e) { okAll = false; } }
+    say('② 刷新要闻…');
+    var jobs = [];
+    if (window.__sinaLoad) jobs.push(Promise.resolve().then(function(){ return window.__sinaLoad(); }).catch(function(){ okAll = false; }));
+    if (window.__newsRefresh) jobs.push(Promise.resolve().then(function(){ return window.__newsRefresh(); }).catch(function(){ okAll = false; }));
+    await Promise.allSettled(jobs);
+    say('③ 重算矩阵与相关性…');
+    if (window.__histRefresh) { try { await window.__histRefresh(true); } catch (e) { okAll = false; } }
+    try { window.__updateSourceStatus(); } catch (e) {}
+    say((okAll ? '已全部更新 ' : '部分源未连通，已保留上次数据 ') + new Date().toTimeString().slice(0, 8));
+    setTimeout(function () { if (toast) toast.style.opacity = '0'; }, 2400);
+  } catch (e) {
+    say('刷新失败：' + (e && e.message ? e.message : '未知错误'));
+  } finally {
+    if (svg) setTimeout(function () { svg.style.transform = 'rotate(0deg)'; }, 950);
+    if (btn) setTimeout(function () { delete btn.dataset.busy; }, 1400);
+  }
+};
 </script>
 </body>
 

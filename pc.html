@@ -3683,11 +3683,12 @@ setInterval(refreshLive, 60000);
   </div>
   <div class="yl-cfg" id="yl-cfg">
     <div class="yl-cfg-row"><span>AI 回答</span><input type="checkbox" id="yl-ai-on" checked><span style="width:auto;color:#6b7280">关闭则只用页面内置研判</span></div>
+    <div class="yl-cfg-row"><span>服务商</span><select id="yl-provider" style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e8eaf1;padding:5px 8px;font-size:11px;outline:none"><option value="free">免 key 通道（Pollinations）</option><option value="doubao">豆包 · 火山方舟</option></select></div>
     <div class="yl-cfg-row"><span>接口地址</span><input id="yl-base" placeholder="https://text.pollinations.ai/openai"></div>
     <div class="yl-cfg-row"><span>模型名</span><input id="yl-model" placeholder="openai"></div>
     <div class="yl-cfg-row"><span>Key（可选）</span><input id="yl-key" placeholder="留空即走免 key 通道"></div>
     <div class="yl-cfg-row"><button class="yl-cfg-btn" id="yl-cfg-save">保存</button><button class="yl-cfg-btn" id="yl-cfg-reset">恢复默认</button><span id="yl-cfg-tip" style="width:auto;color:#6b7280">未测</span></div>
-    <div class="yl-cfg-tip">默认免 key（Pollinations，OpenAI 兼容）。若你有带 token 的兼容地址，填接口与 Key 即可切换。</div>
+    <div class="yl-cfg-tip">默认免 key（Pollinations，OpenAI 兼容）。豆包 · 火山方舟需带 token，且方舟域名不返回跨域头，页面上要填可跨域的中转地址才能直连；失败会自动回退免 key 通道。</div>
   </div>
   <div class="yl-msgs" id="yl-msgs"></div>
   <div class="yl-chips" id="yl-chips"></div>
@@ -3816,19 +3817,35 @@ setInterval(refreshLive, 60000);
     return (label||key)+' $'+v+c;
   }
   function liveFlag(){ return window.__NEWS_LIVE__ ? '实时连接（新浪7×24）' : '缓存头条（实时源暂不可达）'; }
+  // 重要性打分：宏观/央行/地缘/大宗/龙头公司权重更高
+  function newsScore(it){
+    var t=it.rich_text||'', s=0;
+    if(/美联储|加息|降息|降准|LPR|央行|非农|CPI|PCE|GDP|关税|制裁|停火|战争|冲突|空袭|导弹|OPEC|原油|黄金|白银|比特币|以太坊|英伟达|财报|破产|暴雷|违约|评级|刺激|法案|监管|上市|并购|出口管制|芯片|AI|汇率|人民币|国债|就业/.test(t)) s+=3;
+    if(/同比|环比|创|新高|新低|首次|最大|暴跌|暴涨|暂停|取消|宣布|达成|批准|否决|超预期|不及预期/.test(t)) s+=1;
+    return s;
+  }
   function nl(kw,n,withTime){
-    var src=window.__NEWS__||[]; var kws=(kw||'').split('|').filter(Boolean);
-    var out=[];
-    var tiers=[6,24,1e9];
-    for(var ti=0;ti<tiers.length&&out.length<(n||8);ti++){
-      var cap=tiers[ti];
-      for(var i=0;i<src.length&&out.length<(n||8);i++){
-        var it=src[i], t=it.rich_text||'';
-        if(kws.length){ var hit=false; for(var j=0;j<kws.length;j++){ if(kws[j]&&t.toLowerCase().indexOf(kws[j].toLowerCase())>=0){ hit=true; break; } } if(!hit) continue; }
-        var a=newsAge(it.create_time||'');
-        if(a<0||a>cap) continue;
-        out.push((withTime?('['+relTime(it.create_time)+'] '):'')+t);
+    var src=window.__NEWS__||[], kws=(kw||'').split('|').filter(Boolean), pool=[];
+    for(var i=0;i<src.length;i++){
+      var it=src[i], t=it.rich_text||'';
+      if(!t) continue;
+      if(kws.length){
+        var hit=false;
+        for(var j=0;j<kws.length;j++){ if(kws[j]&&t.toLowerCase().indexOf(kws[j].toLowerCase())>=0){ hit=true; break; } }
+        if(!hit) continue;
       }
+      var a=newsAge(it.create_time||'');
+      if(a<0||a>24) continue;
+      pool.push({it:it,a:a,sc:newsScore(it)});
+    }
+    if(kws.length) pool.sort(function(x,y){ return x.a-y.a; });
+    else pool.sort(function(x,y){ return (y.sc-x.sc)||(x.a-y.a); });
+    var out=[], seen={};
+    for(var k=0;k<pool.length&&out.length<(n||8);k++){
+      var key=(pool[k].it.rich_text||'').slice(0,24);
+      if(seen[key]) continue;
+      seen[key]=1;
+      out.push((withTime?('['+relTime(pool[k].it.create_time)+'] '):'')+pool[k].it.rich_text);
     }
     return out;
   }
@@ -3876,7 +3893,7 @@ setInterval(refreshLive, 60000);
     if(hits.news||(!hits.lore&&Object.keys(hits).length===0)){
       var kw=s.replace(/今日|要闻|新闻|快讯|头条|最新|消息|今天|有什么|动态|怎么样|如何|多少|了吗|什么|关于|想|知道|看|查/g,'').slice(0,12);
       var list=nl(kw,'',8,true);
-      var head=(kw&&list.length)?('搜「'+kw+'」相关要闻（按新鲜度优先）：'):(kw?('快讯中暂无「'+kw+'」相关内容，以下为今日要闻：'):'今日大陆要闻（按新鲜度优先，6小时内最新）：');
+      var head=(kw&&list.length)?('搜「'+kw+'」相关新闻（24小时内，按时间倒序）：'):(kw?('24 小时内暂无「'+kw+'」相关新闻，先看今日要闻：'):'今日要闻（24 小时内主要新闻，按重要性排序）：');
       parts.push(head+'\n'+(list.length?list.join('\n'):jn(nl('',8,true))));
     }
     if(!parts.length) parts.push(help());
@@ -3885,7 +3902,7 @@ setInterval(refreshLive, 60000);
   }
   var aiHist=[];
   function llmCfg(){
-    var d={base:'https://text.pollinations.ai/openai', model:'openai', key:'', on:true};
+    var d={provider:'free', base:'https://text.pollinations.ai/openai', model:'openai', key:'', on:true};
     try{ var s=localStorage.getItem('doubi.llm'); if(s){ var o=JSON.parse(s); for(var k in o){ if(o[k]!==undefined) d[k]=o[k]; } } }catch(e){}
     return d;
   }
@@ -3897,8 +3914,8 @@ setInterval(refreshLive, 60000);
       picks.forEach(function(p){ var d=md[p[0]]; if(d&&isFinite(d.price)) q.push(p[1]+' '+(+d.price).toFixed(2)+(d.chg==null?'':'('+(d.chg>=0?'+':'')+d.chg.toFixed(2)+'%)')); });
       if(q.length) out.push('实时行情：'+q.join('；'));
       if(window.goldPrice) out.push('贵金属：黄金 $'+Math.round(window.goldPrice)+'/oz，白银 $'+(+window.silverPrice).toFixed(2)+'/oz');
-      var news=(window.__NEWS__||[]).slice(0,10).map(function(it){ return '['+relTime(it.create_time)+'] '+(it.rich_text||'').slice(0,90); });
-      if(news.length) out.push('最新快讯（按新鲜度）：\n'+news.join('\n'));
+      var news=nl('',10,true).map(function(x){ return x.slice(0,110); });
+      if(news.length) out.push('24小时内主要新闻（按重要性排序）：\n'+news.join('\n'));
       try{ out.push('央行政策利率：'+RATES.map(function(x){ return x[0]+' '+x[1]; }).join('；')); }catch(e){}
       var f=computeFear(); out.push('情绪指数：'+f.label+' '+f.score+'/100');
     }catch(e){}
@@ -3907,10 +3924,12 @@ setInterval(refreshLive, 60000);
   function cleanMd(t){
     return String(t||'').replace(/\*\*/g,'').replace(/^#{1,6}\s*/gm,'').replace(/\n{3,}/g,'\n\n').trim();
   }
-  async function askLLM(q){
-    var cfg=llmCfg();
+  var PROVIDERS={ free:{base:'https://text.pollinations.ai/openai', model:'openai'},
+                  doubao:{base:'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model:'doubao-seed-1-6-250615'} };
+  async function callLLM(cfg,q){
     if(!cfg.base) throw new Error('no base');
     var sys='你是《斗破苍穹》里的药老（药尘），炼药宗师，语气沉稳带一点古意，可自称"老朽"，但回答必须专业、简洁、给结论，不要空话。用简体中文，控制在200字内。涉及行情、新闻、利率时只能用下面给出的实时数据，不许编造数字；数据里没有的就直说没有。\n\n【页面实时数据】\n'+ctxBrief();
+    if(cfg.provider==='doubao') sys += '\n（本回答由豆包大模型生成）';
     var msgs=[{role:'system',content:sys}];
     aiHist.slice(-8).forEach(function(m){ msgs.push(m); });
     msgs.push({role:'user',content:q});
@@ -3927,6 +3946,19 @@ setInterval(refreshLive, 60000);
     aiHist.push({role:'user',content:q}); aiHist.push({role:'assistant',content:t});
     if(aiHist.length>16) aiHist=aiHist.slice(-16);
     return t;
+  }
+  async function askLLM(q){
+    var cfg=llmCfg();
+    if(cfg.provider==='doubao' && !cfg.key) throw new Error('豆包需填火山方舟 API Key');
+    try{ return await callLLM(cfg,q); }
+    catch(e){
+      if(cfg.provider==='doubao'){
+        var fb={provider:'free', base:PROVIDERS.free.base, model:'openai', key:''};
+        var t=await callLLM(fb,q);
+        return t+'\n\n（豆包接口被浏览器跨域拦截，本次改由免 key 大模型回答；若要豆包直连，请在接口地址填可跨域的中转地址）';
+      }
+      throw e;
+    }
   }
   function ask(q){
     q=(q||'').trim(); if(!q) return;
@@ -3956,11 +3988,19 @@ setInterval(refreshLive, 60000);
   function cfgFill(){
     var c=llmCfg();
     var on=document.getElementById('yl-ai-on'), base=document.getElementById('yl-base'),
-        model=document.getElementById('yl-model'), key=document.getElementById('yl-key');
+        model=document.getElementById('yl-model'), key=document.getElementById('yl-key'),
+        prov=document.getElementById('yl-provider');
     if(on) on.checked=c.on!==false;
+    if(prov) prov.value=c.provider||'free';
     if(base) base.value=c.base||'';
     if(model) model.value=c.model||'openai';
     if(key) key.value=c.key||'';
+    if(prov) prov.onchange=function(){
+      var p=PROVIDERS[prov.value]||PROVIDERS.free;
+      if(base) base.value=p.base;
+      if(model) model.value=p.model;
+      if(key) key.placeholder=(prov.value==='doubao'?'填火山方舟 API Key（必填）':'留空即走免 key 通道');
+    };
   }
   cfgFill();
   if(gear) gear.onclick=function(){ cfgBox.classList.toggle('open'); cfgFill(); };
@@ -3968,8 +4008,10 @@ setInterval(refreshLive, 60000);
   if(cfgSave) cfgSave.onclick=function(){
     var on=document.getElementById('yl-ai-on'), base=document.getElementById('yl-base'),
         model=document.getElementById('yl-model'), key=document.getElementById('yl-key');
-    var c={on:on?on.checked:true, base:(base?base.value.trim():'')||'https://text.pollinations.ai/openai',
-           model:(model?model.value.trim():'')||'openai', key:key?key.value.trim():''};
+    var prov=document.getElementById('yl-provider');
+    var pv=prov?prov.value:'free', pd=PROVIDERS[pv]||PROVIDERS.free;
+    var c={on:on?on.checked:true, provider:pv, base:(base?base.value.trim():'')||pd.base,
+           model:(model?model.value.trim():'')||pd.model, key:key?key.value.trim():''};
     saveCfg(c); aiHist=[];
     if(cfgTip){ cfgTip.textContent='已保存'; setTimeout(function(){ cfgTip.textContent='未测'; },1500); }
   };
